@@ -15,6 +15,7 @@ class User(Base):
     gender = Column(String, nullable=False)
     body_type = Column(Integer, nullable=False)
     goal = Column(Integer, nullable=False)
+    hashed_password = Column(String)
     
     # Relationships
     workout_plan = relationship('WorkoutPlan', back_populates='user', uselist=False, cascade="all, delete-orphan")
