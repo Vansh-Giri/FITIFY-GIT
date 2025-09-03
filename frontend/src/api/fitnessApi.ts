@@ -44,6 +44,7 @@ export interface Exercise {
     id: number;
     name: string;
     type: string;
+    muscle_group_id: number;
 }
 
 export interface WorkoutDayExercise {
@@ -79,6 +80,11 @@ export interface LogData {
 
 export interface LoggedSet extends LogData {
     id: number;
+}
+
+export interface WorkoutTemplate {
+    id: number;
+    name: string;
 }
 
 // --- API Client Functions ---
@@ -117,8 +123,14 @@ export const getWorkoutPlan = async (userId: number): Promise<WorkoutPlanRespons
   return response.json();
 };
 
-export const getAllExercises = async (): Promise<Exercise[]> => {
-    const response = await fetch(`${API_BASE_URL}/exercises/`);
+export const getAllExercises = async (muscleGroupIds?: number[]): Promise<Exercise[]> => {
+    let url = `${API_BASE_URL}/exercises/`;
+    if (muscleGroupIds && muscleGroupIds.length > 0) {
+        const params = new URLSearchParams();
+        muscleGroupIds.forEach(id => params.append('muscle_group_ids', String(id)));
+        url += `?${params.toString()}`;
+    }
+    const response = await fetch(url);
     if (!response.ok) {
         throw new Error(`Failed to fetch exercises: ${response.statusText}`);
     }
@@ -137,7 +149,6 @@ export const changeExerciseInPlan = async ({ dayExerciseId, newExerciseId }: { d
     return response.json();
 };
 
-// CORRECTED FUNCTION SIGNATURE
 export const logWorkoutSet = async (logData: LogData) => {
     const response = await fetch(`${API_BASE_URL}/logs/session`, {
         method: 'POST',
@@ -149,8 +160,6 @@ export const logWorkoutSet = async (logData: LogData) => {
     }
     return response.json();
 };
-
-// --- NEWLY ADDED FUNCTIONS ---
 
 export const getLogsForDate = async (userId: number, date: string): Promise<LoggedSet[]> => {
     const response = await fetch(`${API_BASE_URL}/logs/session/${userId}/${date}`);
@@ -168,6 +177,28 @@ export const deleteLoggedSet = async ({ logId, userId }: { logId: number, userId
     });
     if (!response.ok) {
         throw new Error(`Failed to delete log: ${response.statusText}`);
+    }
+    return response.json();
+};
+
+// --- NEW FUNCTIONS FOR TEMPLATE CUSTOMIZATION ---
+
+export const getWorkoutTemplates = async (): Promise<WorkoutTemplate[]> => {
+    const response = await fetch(`${API_BASE_URL}/templates/`);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch workout templates: ${response.statusText}`);
+    }
+    return response.json();
+};
+
+export const swapDayWithTemplate = async ({ dayId, templateId, userId }: { dayId: number, templateId: number, userId: number }) => {
+    const response = await fetch(`${API_BASE_URL}/workout-day/${dayId}/swap-template`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template_id: templateId, user_id: userId }),
+    });
+    if (!response.ok) {
+        throw new Error(`Failed to swap template: ${response.statusText}`);
     }
     return response.json();
 };

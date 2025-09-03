@@ -155,3 +155,62 @@ async def delete_session_log(db: AsyncSession, log_id: int, user_id: int) -> boo
         await db.commit()
         return True
     return False
+
+
+async def get_template_count(db: AsyncSession) -> int:
+    result = await db.execute(select(func.count(models.WorkoutTemplate.id)))
+    return result.scalar_one()
+
+async def get_all_exercises_dict(db: AsyncSession) -> dict:
+    exercises = await get_all_exercises(db)
+    return {ex.name: ex for ex in exercises}
+
+async def create_workout_template(db: AsyncSession, name: str) -> models.WorkoutTemplate:
+    template = models.WorkoutTemplate(name=name)
+    db.add(template)
+    await db.commit()
+    await db.refresh(template)
+    return template
+
+async def add_exercise_to_template(db: AsyncSession, template_id: int, exercise_id: int):
+    template_ex = models.WorkoutTemplateExercise(template_id=template_id, exercise_id=exercise_id)
+    db.add(template_ex)
+    await db.commit()
+
+async def get_all_templates(db: AsyncSession) -> List[models.WorkoutTemplate]:
+    result = await db.execute(select(models.WorkoutTemplate))
+    return result.scalars().all()
+
+async def swap_workout_day_with_template(db: AsyncSession, workout_day_id: int, template_id: int, sets: int, reps: str):
+    # 1. Delete old exercises for the day
+    await db.execute(delete(models.WorkoutDayExercise).where(models.WorkoutDayExercise.workout_day_id == workout_day_id))
+    
+    # 2. Get new exercises from the template
+    result = await db.execute(
+        select(models.WorkoutTemplateExercise)
+        .filter(models.WorkoutTemplateExercise.template_id == template_id)
+    )
+    template_exercises = result.scalars().all()
+
+    # 3. Add new exercises to the workout day
+    new_exercises = []
+    for temp_ex in template_exercises:
+        new_day_ex = models.WorkoutDayExercise(
+            workout_day_id=workout_day_id,
+            exercise_id=temp_ex.exercise_id,
+            sets=sets,
+            reps=reps
+        )
+        db.add(new_day_ex)
+        new_exercises.append(new_day_ex)
+    
+    await db.commit()
+    return new_exercises
+
+async def get_exercises_by_muscle_group_ids(db: AsyncSession, muscle_group_ids: List[int]) -> List[models.Exercise]:
+    """Fetches all exercises that belong to a given list of muscle group IDs."""
+    result = await db.execute(
+        select(models.Exercise)
+        .filter(models.Exercise.muscle_group_id.in_(muscle_group_ids))
+    )
+    return result.scalars().all()

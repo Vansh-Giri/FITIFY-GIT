@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 from datetime import date
+from fastapi import Query
 
 # Import all necessary modules from our application
 from . import models, schemas, crud, database, workout_generator, seed
@@ -115,4 +116,37 @@ async def add_exercise_to_plan(day_id: int, exercise_add: schemas.WorkoutDayExer
 
 @app.get("/api/exercises/", response_model=List[schemas.Exercise])
 async def list_all_exercises(db: AsyncSession = Depends(database.get_db)):
+    return await crud.get_all_exercises(db)
+
+
+@app.get("/api/templates/", response_model=List[schemas.WorkoutTemplate])
+async def list_all_templates(db: AsyncSession = Depends(database.get_db)):
+    return await crud.get_all_templates(db)
+
+@app.put("/api/workout-day/{day_id}/swap-template", response_model=List[schemas.WorkoutDayExercise])
+async def swap_day_template(day_id: int, template_swap: schemas.TemplateSwap, db: AsyncSession = Depends(database.get_db)):
+    user = await crud.get_user(db, template_swap.user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    # Determine sets/reps from user's goal
+    sets, reps = 4, "8-12" # Default
+    if user.goal <= 3: sets, reps = 3, "12-15"
+    elif user.goal > 6: sets, reps = 5, "4-6"
+
+    return await crud.swap_workout_day_with_template(db, day_id, template_swap.template_id, sets, reps)
+
+@app.get("/api/exercises/", response_model=List[schemas.Exercise])
+async def list_all_exercises(
+    db: AsyncSession = Depends(database.get_db),
+    # Allow filtering by a list of muscle group IDs passed as query parameters
+    # e.g., /api/exercises/?muscle_group_ids=1&muscle_group_ids=2
+    muscle_group_ids: List[int] = Query(None)
+):
+    """
+    Provides a list of all available exercises from the library.
+    Can be filtered by one or more muscle group IDs.
+    """
+    if muscle_group_ids:
+        return await crud.get_exercises_by_muscle_group_ids(db, muscle_group_ids=muscle_group_ids)
     return await crud.get_all_exercises(db)

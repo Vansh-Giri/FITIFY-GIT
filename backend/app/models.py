@@ -92,3 +92,18 @@ class WorkoutSessionLog(Base):
     # Relationships
     user = relationship("User")
     exercise = relationship("Exercise")
+
+
+class WorkoutTemplate(Base):
+    __tablename__ = 'workout_templates'
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)
+    exercises = relationship("WorkoutTemplateExercise", back_populates="template")
+
+class WorkoutTemplateExercise(Base):
+    __tablename__ = 'workout_template_exercises'
+    id = Column(Integer, primary_key=True, index=True)
+    template_id = Column(Integer, ForeignKey('workout_templates.id'))
+    exercise_id = Column(Integer, ForeignKey('exercises.id'))
+    template = relationship("WorkoutTemplate", back_populates="exercises")
+    exercise = relationship("Exercise")

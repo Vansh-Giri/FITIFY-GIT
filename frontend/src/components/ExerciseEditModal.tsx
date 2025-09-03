@@ -1,37 +1,63 @@
-import React, { useState } from 'react';
-import { useQuery, useMutation } from '@tanstack/react-query';
-import { getAllExercises, changeExerciseInPlan } from '../api/fitnessApi';
+import React, { useState, useMemo } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getAllExercises, changeExerciseInPlan, Exercise, WorkoutDayExercise } from '../api/fitnessApi';
 
 interface ExerciseEditModalProps {
   isOpen: boolean;
   onClose: () => void;
   dayExerciseId: number;
-  refetchPlan: () => void;
+  onPlanChange: () => void;
+  // Pass down the current day's exercises to filter out duplicates
+  currentExercises: WorkoutDayExercise[];
 }
 
-const ExerciseEditModal: React.FC<ExerciseEditModalProps> = ({ isOpen, onClose, dayExerciseId, refetchPlan }) => {
+const ExerciseEditModal: React.FC<ExerciseEditModalProps> = ({ isOpen, onClose, dayExerciseId, onPlanChange, currentExercises }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const queryClient = useQueryClient();
 
-  const { data: exercises, isLoading } = useQuery({
-    queryKey: ['allExercises'],
-    queryFn: getAllExercises,
+  // --- NEW: INTELLIGENT FILTERING LOGIC ---
+  // 1. Get the muscle groups for the current day's exercises
+  const relevantMuscleGroupIds = useMemo(() => {
+    const ids = new Set(currentExercises.map(ex => ex.exercise.muscle_group_id));
+    return Array.from(ids);
+  }, [currentExercises]);
+
+  // 2. Fetch only the exercises that match those muscle groups
+  const { data: exercises, isLoading, isError } = useQuery<Exercise[]>({
+    queryKey: ['allExercises', relevantMuscleGroupIds],
+    queryFn: () => getAllExercises(relevantMuscleGroupIds),
+    enabled: isOpen, // Only fetch when the modal is open
   });
 
   const changeExerciseMutation = useMutation({
     mutationFn: changeExerciseInPlan,
     onSuccess: () => {
-      refetchPlan();
+      // --- THE FIX IS HERE ---
+      // Instead of onPlanChange(), we invalidate the query.
+      // This is a more robust pattern with TanStack Query.
+      queryClient.invalidateQueries({ queryKey: ['workoutPlan'] });
       onClose();
     },
     onError: (error) => {
+      // This will now only be called on a genuine error
       console.error("Failed to change exercise:", error);
-      alert("Failed to change exercise.");
+      alert("An error occurred while swapping the exercise.");
     }
   });
 
-  const filteredExercises = exercises?.filter(ex => 
-    ex.name.toLowerCase().includes(searchTerm.toLowerCase())
-  ) || [];
+  // --- NEW: FILTERING LOGIC ---
+  const filteredExercises = useMemo(() => {
+    // Get IDs of exercises already in the plan for this day
+    const currentExerciseIds = new Set(currentExercises.map(ex => ex.exercise.id));
+    
+    return exercises?.filter(ex => 
+      // Condition 1: Exercise is not already in the day's plan
+      !currentExerciseIds.has(ex.id) &&
+      // Condition 2: Exercise name matches search term
+      ex.name.toLowerCase().includes(searchTerm.toLowerCase())
+    ) || [];
+  }, [exercises, searchTerm, currentExercises]);
+
 
   if (!isOpen) return null;
 
@@ -41,27 +67,33 @@ const ExerciseEditModal: React.FC<ExerciseEditModalProps> = ({ isOpen, onClose, 
         <h2 className="text-xl font-bold text-white mb-4">Change Exercise</h2>
         <input
           type="text"
-          placeholder="Search exercises..."
+          placeholder="Search relevant exercises..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="w-full bg-gray-700 border border-gray-600 rounded-md py-2 px-3 text-white mb-4"
         />
         <div className="max-h-64 overflow-y-auto space-y-2">
-          {isLoading ? (
-            <p className="text-gray-400">Loading exercises...</p>
-          ) : (
-            filteredExercises.map(exercise => (
-              <button
-                key={exercise.id}
-                onClick={() => changeExerciseMutation.mutate({ dayExerciseId, newExerciseId: exercise.id })}
-                className="w-full text-left p-2 rounded-md hover:bg-gray-700 transition-colors"
-              >
-                {exercise.name}
-              </button>
-            ))
+          {isLoading && <p className="text-gray-400">Loading exercises...</p>}
+          {isError && <p className="text-red-500">Could not load exercises.</p>}
+          {!isLoading && !isError && filteredExercises.length === 0 && (
+            <p className="text-gray-400">No other relevant exercises found.</p>
           )}
+          {filteredExercises.map(exercise => (
+            <button
+              key={exercise.id}
+              onClick={() => changeExerciseMutation.mutate({ dayExerciseId, newExerciseId: exercise.id })}
+              disabled={changeExerciseMutation.isPending}
+              className="w-full text-left p-2 rounded-md hover:bg-gray-700 transition-colors text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {exercise.name}
+            </button>
+          ))}
         </div>
-        <button onClick={onClose} className="mt-6 w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg">
+        <button 
+            onClick={onClose} 
+            className="mt-6 w-full bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-lg"
+            disabled={changeExerciseMutation.isPending}
+        >
           Cancel
         </button>
       </div>

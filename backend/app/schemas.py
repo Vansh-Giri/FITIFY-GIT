@@ -87,3 +87,12 @@ class WorkoutPlanResponse(BaseModel):
 class StatusResponse(BaseModel):
     """A generic response for success/status messages."""
     message: str
+
+class WorkoutTemplate(BaseModel):
+    id: int
+    name: str
+    model_config = model_config
+
+class TemplateSwap(BaseModel):
+    template_id: int
+    user_id: int

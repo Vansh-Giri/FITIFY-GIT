@@ -82,3 +82,22 @@ async def seed_database(db: AsyncSession):
 
     print("Database seeding complete.")
 
+    # --- 3. Create Workout Templates ---
+    template_count = await crud.get_template_count(db)
+    if template_count == 0:
+        print("Seeding workout templates...")
+        # Define templates and their associated exercises by name
+        templates = {
+            "Push Day": ["Bench Press", "Overhead Press", "Incline Dumbbell Press", "Tricep Dips", "Dumbbell Lateral Raises"],
+            "Pull Day": ["Deadlifts", "Pull-ups", "Bent-Over Barbell Rows", "Lat Pulldowns", "Barbell Curls"],
+            "Leg Day": ["Squats", "Leg Press", "Lunges", "Leg Curls", "Calf Raises"],
+            "Chest Focus": ["Bench Press", "Incline Dumbbell Press", "Dumbbell Flyes", "Push-ups", "Cable Crossovers"],
+            "Back Focus": ["Pull-ups", "Bent-Over Barbell Rows", "Seated Cable Rows", "Lat Pulldowns", "Face Pulls"]
+        }
+        all_exercises = await crud.get_all_exercises_dict(db) # New CRUD function needed
+        for template_name, exercise_names in templates.items():
+            template = await crud.create_workout_template(db, name=template_name)
+            for ex_name in exercise_names:
+                if ex_name in all_exercises:
+                    await crud.add_exercise_to_template(db, template_id=template.id, exercise_id=all_exercises[ex_name].id)
+        print("Template seeding complete.")
